@@ -7,7 +7,7 @@ class ImageToPatches:
 
     def __init__(self, image : np.ndarray, patch_size : int) -> None:
         
-        self.image = image
+        self.image = jnp.asarray(image)
 
         self.H, self.W = self.image.shape[0 : -1]
 
