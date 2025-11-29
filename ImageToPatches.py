@@ -1,72 +1,44 @@
 
-import numpy as np
+import jax
 
 import jax.numpy as jnp
 
-class ImageToPatches:
+def image_to_patches(image : jnp.ndarray, patch_size : int) -> tuple:
 
-    def __init__(self, image : np.ndarray, patch_size : int) -> None:
+    H, W = image.shape[0 : -1]
+
+    H_n_patches = (H + patch_size - 1)//patch_size
+
+    W_n_patches = (W + patch_size - 1)//patch_size
+
+    H_pad = H_n_patches*patch_size
+
+    W_pad = W_n_patches*patch_size
+
+    yy, xx = jnp.meshgrid(jnp.linspace(0, 1, H), jnp.linspace(0, 1, W), indexing = 'ij')
+
+    pixel = jnp.stack([yy, xx], axis = -1)
+
+    color = image/image.max(axis = (0, 1))
+
+    pad_spec = ((0, H_pad - H), (0, W_pad - W), (0, 0))
+
+    pixel_pad = jnp.pad(pixel, pad_spec, mode = 'constant')
+
+    color_pad = jnp.pad(color, pad_spec, mode = 'constant')
+
+    def pad_to_patches(pad) -> jnp.array:
+
+        pad = pad.reshape(H_n_patches, patch_size, W_n_patches, patch_size, -1)
+
+        pad = pad.swapaxes(1, 2)
         
-        self.image = jnp.asarray(image)
+        return pad.reshape(H_n_patches, W_n_patches, patch_size*patch_size, pad.shape[-1])
+        
+    pixel_patches = pad_to_patches(pad = pixel_pad)
 
-        self.H, self.W = self.image.shape[0 : -1]
+    color_patches = pad_to_patches(pad = color_pad)
 
-        self.patch_size = patch_size
+    return pixel_patches, color_patches
 
-        self.H_n_patches = jnp.ceil(self.H/patch_size).astype(int)
-
-        self.W_n_patches = jnp.ceil(self.W/patch_size).astype(int)
-
-        self.H_pad = self.H_n_patches*self.patch_size
-
-        self.W_pad = self.W_n_patches*self.patch_size
-
-        self.pixel = jnp.zeros(shape = (self.H*self.W, 2))
-
-        self.color = jnp.zeros(shape = (self.H*self.W, 3))
-
-        self.pixel_patches = jnp.zeros(shape = (self.H_n_patches, self.W_n_patches, self.patch_size*self.patch_size, 2))
-
-        self.color_patches = jnp.zeros(shape = (self.H_n_patches, self.W_n_patches, self.patch_size*self.patch_size, 3))
-
-    def image_to_pixel(self) -> None:
-
-        self.pixel = jnp.indices((self.H, self.W)).reshape((2, self.H*self.W)).T
-
-        self.pixel = self.pixel/self.pixel.max(axis = 0)
-
-    def pixel_to_patches(self) -> None:
-
-        padding = jnp.zeros(shape = (self.H_pad, self.W_pad, 2))
-
-        padding = padding.at[ : self.H, : self.W].set(self.pixel.reshape(self.H, self.W, 2))
-
-        padding = padding.reshape((self.H_pad*self.W_pad, 2))
-
-        self.pixel_patches = padding.reshape((self.H_n_patches, self.W_n_patches, self.patch_size*self.patch_size, 2))
-
-    def image_to_color(self) -> None:
-
-        self.color = self.image.reshape((self.H*self.W, 3))
-
-        self.color = self.color/self.color.max(axis = 0)
-
-    def color_to_patches(self) -> None:
-
-        padding = jnp.zeros(shape = (self.H_pad, self.W_pad, 3))
-
-        padding = padding.at[ : self.H, : self.W].set(self.color.reshape(self.H, self.W, 3))
-
-        padding = padding.reshape((self.H_pad*self.W_pad, 3))
-
-        self.color_patches = padding.reshape((self.H_n_patches, self.W_n_patches, self.patch_size*self.patch_size, 3))
-
-    def image_to_patches(self) -> None:
-
-        self.image_to_pixel()
-
-        self.pixel_to_patches()
-
-        self.image_to_color()
-
-        self.color_to_patches()
+image_to_patches = jax.jit(image_to_patches, static_argnames = ('patch_size', ))
